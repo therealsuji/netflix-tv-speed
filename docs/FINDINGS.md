@@ -97,6 +97,26 @@ The UI is not Android views: uiautomator shows only `FrameLayout` containers
 into SurfaceViews. The APK ships no JS/HTML UI bundle (`assets/` holds only
 `PublicSuffixDatabase`, dexopt profiles, `assets/nrd/...`).
 
+Where the UI actually lives (measured, later revision):
+
+- `libgibbon.so` embeds the **UI framework** as JS: 82 gzip modules (~3 MB inflated) plus
+  a 1.44 MB uncompressed webpack bundle and a 530 KB gibbon API shim. These expose
+  `makeWidget`, `scene`, `widget`, `onKey`, `eval`, `loadScript` — but contain no app
+  screen code and no UI strings.
+- The only localised UI text is in `resources.arsc` ("Sign In", "GET STARTED",
+  "Continue watching"). "Get Help", "My List", "Who's watching" are not in the APK at all.
+- At boot the Java HTTP layer makes exactly one request:
+  `https://nflx-android-tv.prod.partner.netflix.net/preapp/tiles`. A cold start moves
+  ~4.2 MB, consistent with the poster artwork on the sign-in wall.
+- The split ships `libcronet.so`, and gibbon has its own OpenSSL, so its HTTP never goes
+  through `CronetHttpURLConnection` (verified by hooking that constructor: one URL, above).
+- The app refuses to render UI without connectivity ("device no internet"), so offline
+  behaviour cannot be used to prove whether screens are local.
+
+Conclusion: screen code is either native C++ inside `libgibbon.so` or fetched by native
+Cronet. Either way there is no editable JS app bundle on disk, so an in-UI control means
+native binary work, not a script edit.
+
 Inside `libgibbon.so` (63 MB, V8 + UI framework) these exist as symbol strings:
 `nrdp.gibbon.eval`, `makeWidget`, `scene.overlay/addOverlay`, `loadScript(url)`
 (fetch → `eval`), `runConsole`, `_replaceUrls`, `_prepareNetworkRequest`.
