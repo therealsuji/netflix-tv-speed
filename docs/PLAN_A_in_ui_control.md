@@ -38,3 +38,41 @@ Breaks on every Netflix UI bundle update. Snapshot the TV before starting.
   SSL_CTX_set_verify / verify_callback usage; strings included OpenSSL).
 - Test: patch verify to always-accept, point a proxy at it, confirm we can serve a
   byte-identical copy of their script and the UI still boots. That is the go/no-go.
+
+
+## Update: 2026-10-25 session
+
+Ruled out tonight, with evidence:
+
+1. **Not a downloaded-then-cached script we can edit.** The APK has no JS bundle;
+   `libgibbon.so` carries the framework as 82 gzip modules (~3 MB) plus a 1.44 MB
+   webpack bundle and a 530 KB gibbon shim, but no app screen code and no UI strings.
+   UI text lives in `resources.arsc` only.
+2. **No Java-side network bridge for scripts.** Hooked
+   `CronetHttpURLConnection.<init>`: exactly one URL at boot
+   (`.../preapp/tiles`). gibbon uses native Cronet (`libcronet.so`) and its own OpenSSL,
+   so script fetches never touch Java.
+3. **Console is not reachable from Java.** `nativeCommandEvent` (and the public
+   `M1cMYXGO` wrapper) executed with guard=true and produced zero visual change;
+   `/key down`, `/reload` do nothing. Console commands are registered inside the engine
+   (`runConsole`, `addConsoleCommand` typings exist), not exposed to the host.
+4. **System HTTP proxy is useless.** gibbon ignores it (verified: no hits on a listener
+   while the app booted), and the TV could not reach the Mac anyway (different subnet,
+   no return route).
+5. **Offline behaviour proves nothing.** The app refuses UI without connectivity
+   ("device no internet"), so it cannot be used to distinguish local vs fetched screens.
+
+What is left: native analysis of `libgibbon.so` (63 MB, stripped, V8 embedded).
+Targets, in order of value:
+
+- Find where `nrdp.gibbon.loadScript` / `load` resolve their URL and whether a local
+  `file:///` path is honoured (`file:///` handling exists in the JS: prefixes are
+  stripped and passed to a file loader). If a host-provided path can be influenced from
+  Java (startup params, `boot_request`), that is the injection point.
+- Find the UI screen code: if it is native C++, locate the player-menu construction and
+  add a row there.
+- Locate the V8 startup snapshot / embedded script cache to confirm whether any app JS
+  is compiled in.
+
+Tooling: Ghidra or IDA on `libgibbon.so` (ARM32), plus `capstone` for scripted triage.
+This is a day-scale investigation, not a patch.
