@@ -1,0 +1,7 @@
+*.apk
+*.dex
+*.zip
+apk/
+work/
+p2out/
+p2dex/
