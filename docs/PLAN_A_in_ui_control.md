@@ -115,3 +115,26 @@ Next session should start with Ghidra on `libgibbon.so`:
   within ±40 KB). The table uses non-absolute references, so xref work is required.
 - JS payloads for reference: 82 gzip modules (~3 MB inflated), a 1.44 MB webpack bundle
   at 0x3b088a3, the 530 KB gibbon shim at 0x2869fa8, typings at 0x3c6f636.
+
+## Binary hardening (blocks the static route)
+
+`libgibbon.so` has **no `DT_REL` and no `DT_RELA`**, only `DT_JMPREL` (PLT). A 40 MB
+library with that much data cannot legitimately have zero data relocations, so the
+pointer tables (including the `nfwbr_host_*` JS bridge names near 0x28254c) are not
+resolved by the standard dynamic linker. Combined with missing section headers and a
+stripped symbol table, this is a hardened/obfuscated binary.
+
+Consequence: static xref work on the JS bridge is not viable. The practical unlock is
+**dynamic instrumentation**, i.e. root the TV and use Frida to hook the native
+`loadScript` implementation, then hand it our script (which it evals) and build the
+widget with `makeWidget`.
+
+Order of work if that is approved:
+1. Root the MiTV (uncertain; Android 11, Amlogic). Verify with `su` and Magisk-free
+   alternatives before touching anything.
+2. `frida-server` on device, attach to `com.suji.n1fspeed`.
+3. Hook the native symbol/address behind `nrdp.resourcemanager.loadScript`; feed a script
+   that calls `nrdp.gibbon.makeWidget(...)` + `nrdp.gibbon.scene.overlay`.
+4. Wire the widget's key handling to `com.suji.Speed.setFromOutside()`.
+
+Without root, Plan A ends here.
