@@ -76,3 +76,42 @@ Targets, in order of value:
 
 Tooling: Ghidra or IDA on `libgibbon.so` (ARM32), plus `capstone` for scripted triage.
 This is a day-scale investigation, not a patch.
+
+## API surface (from the embedded TypeScript typings, 1.59 MB blob at 0x3c6f636)
+
+Confirmed signatures:
+
+```ts
+// evaluates a fetched JavaScript file in the current runtime
+export function loadScript(request?: ResourceRequestOptions | string,
+                           callback?: (result: ResourceLoadResult) => void): int32;
+
+// arbitrary load, callback gets the bytes
+export function load(request?: ResourceRequestOptions | string, callback?): int32;
+
+// register/invoke engine console commands
+addConsoleCommand(name: string, description: string | undefined,
+                  callback: (command: ConsoleCommand) => void, completions?): void;
+runConsole(command: string, options?: RunConsoleOptions): void;
+
+// widget creation used by the UI itself
+export function makeWidget(obj?: Record<string, unknown>): Widget;
+```
+
+All of these are JS-side (`@bind` = provided *to* JavaScript). No host/Java-facing eval
+entry exists in the typings, which matches the experiment: `nativeCommandEvent` cannot
+reach the script runtime.
+
+So the injection point has to be created, not found:
+
+- either get a script URL of our choosing into `loadScript` (the request accepts a string
+  or a ResourceRequestOptions object, and `file:///` prefixes are stripped and treated as
+  local paths elsewhere in the platform JS), or
+- patch the native implementation of `loadScript` to eval a buffer we supply.
+
+Next session should start with Ghidra on `libgibbon.so`:
+- The ELF has no useful section headers; reconstruct memory blocks from PT_LOAD.
+- Bridge names live in a table around file offset 0x28254c (226 `nfwbr_host_*` strings
+  within ±40 KB). The table uses non-absolute references, so xref work is required.
+- JS payloads for reference: 82 gzip modules (~3 MB inflated), a 1.44 MB webpack bundle
+  at 0x3b088a3, the 530 KB gibbon shim at 0x2869fa8, typings at 0x3c6f636.
