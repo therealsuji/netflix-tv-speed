@@ -13,7 +13,7 @@ import android.util.Log;
 public final class Speed {
     private static final String TAG = "SUJIDBG";
 
-    private static final float[] STEPS = {1.0f, 1.25f, 1.5f, 2.0f};
+    private static final float[] STEPS = {1.0f, 1.25f, 1.5f, 1.75f, 2.0f};
     private static int index = 0;                       // default 1.0x (stock)
     public static volatile float CURRENT = 1.0f;
 
@@ -57,22 +57,21 @@ public final class Speed {
         player = p;
     }
 
-    /** Set speed from the LAN page. */
+    /** Set speed from the LAN page. Any value in 1.0..2.0 is accepted. */
     public static void setFromOutside(float speed) {
-        float best = STEPS[0];
+        float value = Math.max(1.0f, Math.min(2.0f, speed));
         int bestIndex = 0;
         for (int i = 0; i < STEPS.length; i++) {
-            if (Math.abs(STEPS[i] - speed) < Math.abs(best - speed)) {
-                best = STEPS[i];
+            if (Math.abs(STEPS[i] - value) < Math.abs(STEPS[bestIndex] - value)) {
                 bestIndex = i;
             }
         }
-        if (best == CURRENT) {
+        if (value == CURRENT) {
             apply();
             return;
         }
         index = bestIndex;
-        CURRENT = best;
+        CURRENT = value;
         Log.i(TAG, "SPEED set from web: " + CURRENT);
         try {
             if (appCtx != null) {
